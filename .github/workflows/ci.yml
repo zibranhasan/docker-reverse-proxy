@@ -1,3 +1,4 @@
+
 name: Docker CI
 
 on:
@@ -7,15 +8,42 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Build Docker images
         run: docker compose build
+
+      - name: Start containers
+        run: docker compose up -d
+
+      - name: Wait for containers to become healthy
+        run: |
+          for i in {1..30}; do
+            if docker compose ps --format json | grep -q '"Health":"healthy"'; then
+              break
+            fi
+            sleep 2
+          done
+          docker compose ps
+
+      - name: Test Nginx health endpoint
+        run: |
+          curl --fail http://localhost:8080/nginx-health
+
+      - name: Test backend through Nginx
+        run: |
+          curl --fail http://localhost:8080/
+          curl --fail http://localhost:8080/health
+
+      - name: Show logs if a step fails
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down
